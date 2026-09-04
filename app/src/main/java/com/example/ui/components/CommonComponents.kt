@@ -29,6 +29,7 @@ import com.example.ui.theme.EmeraldTertiary
 fun TopHeaderBar(
     userStats: UserStatsEntity?,
     onNotificationClick: () -> Unit,
+    notificationCount: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val xp = userStats?.totalXp ?: 0
@@ -113,22 +114,44 @@ fun TopHeaderBar(
                     }
                 }
 
-                // Notification Bell Pill Button
-                IconButton(
-                    onClick = onNotificationClick,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surface)
-                        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                        .testTag("notification_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.NotificationsActive,
-                        contentDescription = "إشعار تحفيزي",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
+                // Notification Bell Pill Button with Badge
+                Box(contentAlignment = Alignment.TopEnd) {
+                    IconButton(
+                        onClick = onNotificationClick,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                            .testTag("notification_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.NotificationsActive,
+                            contentDescription = "مركز الإشعارات والتذكيرات",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    if (notificationCount > 0) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFFEF4444),
+                            modifier = Modifier
+                                .size(16.dp)
+                                .offset(x = 2.dp, y = (-2).dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = if (notificationCount > 9) "9+" else notificationCount.toString(),
+                                    color = Color.White,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Black,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

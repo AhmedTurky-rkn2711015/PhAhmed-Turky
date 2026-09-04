@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,7 +17,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -25,9 +25,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.database.entities.UnitProgressEntity
 import com.example.data.database.entities.UserStatsEntity
+import com.example.data.model.LeaderboardPeriod
+import com.example.data.model.LeaderboardUser
 import com.example.data.model.LearningCurriculum
-import com.example.ui.theme.AmberSecondary
-import com.example.ui.theme.EmeraldTertiary
+import com.example.ui.components.CurrentUserRankHighlight
+import com.example.ui.components.LeaderboardPodium
+import com.example.ui.components.LeaderboardUserRow
 
 data class BadgeItem(
     val id: String,
@@ -37,12 +40,22 @@ data class BadgeItem(
     val isUnlocked: Boolean
 )
 
+enum class GamificationViewMode(val title: String, val icon: String) {
+    LEADERBOARD("لوحة الصدارة", "🏆"),
+    BADGES("الأوسمة والشهادة", "🎖️")
+}
+
 @Composable
 fun GamificationScreen(
     userStats: UserStatsEntity?,
     progressList: List<UnitProgressEntity>,
+    leaderboardUsers: List<LeaderboardUser>,
+    selectedPeriod: LeaderboardPeriod,
+    onPeriodSelected: (LeaderboardPeriod) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var viewMode by remember { mutableStateOf(GamificationViewMode.LEADERBOARD) }
+
     val xp = userStats?.totalXp ?: 100
     val streak = userStats?.currentStreak ?: 3
 
@@ -103,12 +116,196 @@ fun GamificationScreen(
         )
     )
 
-    LazyColumn(
+    Column(
         modifier = modifier
             .fillMaxSize()
-            .testTag("gamification_screen"),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .testTag("gamification_screen")
+    ) {
+        // Mode Selector: Leaderboard vs Badges
+        Surface(
+            shape = RoundedCornerShape(percent = 50),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(4.dp)
+            ) {
+                GamificationViewMode.values().forEach { mode ->
+                    val isSelected = viewMode == mode
+                    Surface(
+                        shape = RoundedCornerShape(percent = 50),
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { viewMode = mode }
+                            .testTag("gamification_tab_${mode.name}")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(text = mode.icon, fontSize = 16.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = mode.title,
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold
+                                ),
+                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        when (viewMode) {
+            GamificationViewMode.LEADERBOARD -> {
+                LeaderboardViewContent(
+                    leaderboardUsers = leaderboardUsers,
+                    selectedPeriod = selectedPeriod,
+                    onPeriodSelected = onPeriodSelected
+                )
+            }
+            GamificationViewMode.BADGES -> {
+                BadgesViewContent(
+                    levelInfo = levelInfo,
+                    xp = xp,
+                    streak = streak,
+                    badges = badges,
+                    isAllCompleted = isAllCompleted,
+                    completedUnitsCount = completedUnitsCount
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LeaderboardViewContent(
+    leaderboardUsers: List<LeaderboardUser>,
+    selectedPeriod: LeaderboardPeriod,
+    onPeriodSelected: (LeaderboardPeriod) -> Unit
+) {
+    val currentUser = leaderboardUsers.firstOrNull { it.isCurrentUser }
+    val currentUserRank = currentUser?.rank ?: 0
+    val competitorAhead = leaderboardUsers.firstOrNull { it.rank == currentUserRank - 1 }
+    val topThree = leaderboardUsers.take(3)
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        // Period Selector Filter Chips
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LeaderboardPeriod.values().forEach { period ->
+                    val isSelected = selectedPeriod == period
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { onPeriodSelected(period) },
+                        label = {
+                            Text(
+                                text = period.title,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold
+                                )
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = Color.White,
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                        ),
+                        shape = RoundedCornerShape(percent = 50)
+                    )
+                }
+            }
+        }
+
+        // Podium of Top 3
+        if (topThree.size >= 3) {
+            item {
+                LeaderboardPodium(topThree = topThree)
+            }
+        }
+
+        // Current User Status Banner
+        item {
+            CurrentUserRankHighlight(
+                user = currentUser,
+                competitorAhead = competitorAhead
+            )
+        }
+
+        // Section Title
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "ترتيب المتدربين الأكثر تفاعلاً",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(percent = 50),
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Text(
+                        text = "${leaderboardUsers.size} متنافس",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        }
+
+        // List of all leaderboard users
+        items(leaderboardUsers, key = { it.id }) { user ->
+            LeaderboardUserRow(user = user)
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun BadgesViewContent(
+    levelInfo: Triple<String, String, Float>,
+    xp: Int,
+    streak: Int,
+    badges: List<BadgeItem>,
+    isAllCompleted: Boolean,
+    completedUnitsCount: Int
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // Level & Status Hero Card in Bold Typography style
         item {
@@ -217,9 +414,9 @@ fun GamificationScreen(
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                elevation = CardDefaults.cardElevation(2.dp)
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
             ) {
                 Row(
                     modifier = Modifier.padding(16.dp),
@@ -230,40 +427,38 @@ fun GamificationScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "تحدي اليوم (+50 XP):",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = AmberSecondary
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Black),
+                            color = MaterialTheme.colorScheme.primary
                         )
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = "اكتب قائمة مهام الغد الليلة قبل النوم لتفعيل تأثير زيجارنيك وإراحة عقلك.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
             }
         }
 
-        // Official Certificate Card (The Grand Symbolic Reward!)
+        // Official Certificate Card
         item {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("certificate_card"),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (isAllCompleted) Color(0xFFFEF3C7) else MaterialTheme.colorScheme.surface
                 ),
-                elevation = CardDefaults.cardElevation(3.dp),
+                elevation = CardDefaults.cardElevation(0.dp),
                 border = BorderStroke(
-                    2.dp,
-                    if (isAllCompleted) Color(0xFFF59E0B) else Color(0xFFE2E8F0)
+                    1.dp,
+                    if (isAllCompleted) Color(0xFFF59E0B) else MaterialTheme.colorScheme.outline
                 )
             ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
+                    modifier = Modifier.padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
@@ -273,8 +468,7 @@ fun GamificationScreen(
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = "شهادة إتقان إدارة الوقت مع برايان تريسي",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
                         color = if (isAllCompleted) Color(0xFF92400E) else MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center
                     )
@@ -286,21 +480,21 @@ fun GamificationScreen(
                             "أكمل جميع الوحدات التعليمية الخمس لفتح الشهادة الرسمية وتتويج رحلتك التعليمية (المكتمل: $completedUnitsCount من ${LearningCurriculum.units.size}).",
                         style = MaterialTheme.typography.bodySmall.copy(lineHeight = 20.sp),
                         textAlign = TextAlign.Center,
-                        color = if (isAllCompleted) Color(0xFF78350F) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = if (isAllCompleted) Color(0xFF78350F) else MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     if (isAllCompleted) {
                         Spacer(modifier = Modifier.height(14.dp))
                         Surface(
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(percent = 50),
                             color = Color(0xFFF59E0B),
                             modifier = Modifier.padding(horizontal = 16.dp)
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(text = "⭐ ختم الاعتماد الرسمي متوفر", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text(text = "⭐ ختم الاعتماد الرسمي متوفر", color = Color.White, fontWeight = FontWeight.Black, fontSize = 12.sp)
                             }
                         }
                     }
@@ -314,17 +508,12 @@ fun GamificationScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.EmojiEvents,
-                    contentDescription = null,
-                    tint = AmberSecondary,
-                    modifier = Modifier.size(20.dp)
-                )
+                Text(text = "🎖️", fontSize = 18.sp)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "معرض الأوسمة والمكافآت الرمزية",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
@@ -345,6 +534,10 @@ fun GamificationScreen(
                     Spacer(modifier = Modifier.weight(1f))
                 }
             }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import com.example.ui.components.NotificationCenterDialog
 import com.example.ui.components.QuizDialog
 import com.example.ui.components.TopHeaderBar
 import com.example.ui.screens.*
@@ -54,6 +55,13 @@ fun TimeMasteryApp(viewModel: TimeMasteryViewModel) {
     val quizState by viewModel.quizState.collectAsState()
     val snackbarMsg by viewModel.snackbarMessage.collectAsState()
 
+    // Notification & Leaderboard states
+    val isNotificationCenterOpen by viewModel.isNotificationCenterOpen.collectAsState()
+    val notificationSettings by viewModel.notificationSettings.collectAsState()
+    val inAppNotifications by viewModel.inAppNotifications.collectAsState()
+    val leaderboardUsers by viewModel.leaderboardUsers.collectAsState()
+    val leaderboardPeriod by viewModel.leaderboardPeriod.collectAsState()
+
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(snackbarMsg) {
@@ -71,7 +79,8 @@ fun TimeMasteryApp(viewModel: TimeMasteryViewModel) {
         topBar = {
             TopHeaderBar(
                 userStats = userStats,
-                onNotificationClick = { viewModel.triggerNotification() },
+                onNotificationClick = { viewModel.openNotificationCenter() },
+                notificationCount = inAppNotifications.size,
                 modifier = Modifier.statusBarsPadding()
             )
         },
@@ -203,9 +212,27 @@ fun TimeMasteryApp(viewModel: TimeMasteryViewModel) {
                 AppTab.GAMIFICATION -> {
                     GamificationScreen(
                         userStats = userStats,
-                        progressList = unitProgressList
+                        progressList = unitProgressList,
+                        leaderboardUsers = leaderboardUsers,
+                        selectedPeriod = leaderboardPeriod,
+                        onPeriodSelected = { viewModel.setLeaderboardPeriod(it) }
                     )
                 }
+            }
+
+            // In-App Notification Center & Custom Timing Dialog Overlay
+            if (isNotificationCenterOpen) {
+                NotificationCenterDialog(
+                    notifications = inAppNotifications,
+                    settings = notificationSettings,
+                    onDismissRequest = { viewModel.closeNotificationCenter() },
+                    onUpdateSettings = { newSettings -> viewModel.updateNotificationSettings(newSettings) },
+                    onNotificationActionClick = { notif ->
+                        notif.targetTab?.let { target -> viewModel.selectTab(target) }
+                    },
+                    onDeleteNotification = { id -> viewModel.deleteNotification(id) },
+                    onTriggerTestNotification = { viewModel.triggerNotification() }
+                )
             }
 
             // Interactive Quiz Sheet / Dialog Overlay

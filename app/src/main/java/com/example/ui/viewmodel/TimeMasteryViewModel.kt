@@ -5,8 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.database.AppDatabase
 import com.example.data.database.entities.*
-import com.example.data.model.LearningCurriculum
-import com.example.data.model.LearningUnit
+import com.example.data.model.*
 import com.example.data.repository.TimeMasteryRepository
 import com.example.util.NotificationHelper
 import kotlinx.coroutines.Job
@@ -68,6 +67,15 @@ class TimeMasteryViewModel(application: Application) : AndroidViewModel(applicat
     // Gamification & User Stats
     val userStats: StateFlow<UserStatsEntity?>
 
+    // Leaderboard
+    val leaderboardPeriod = MutableStateFlow(LeaderboardPeriod.WEEKLY)
+    val leaderboardUsers: StateFlow<List<LeaderboardUser>>
+
+    // Periodic Notification Settings & In-App Notification Center
+    val notificationSettings = MutableStateFlow(NotificationScheduleSettings())
+    val inAppNotifications = MutableStateFlow(NotificationHelper.generateInitialInAppNotifications())
+    val isNotificationCenterOpen = MutableStateFlow(false)
+
     // Daily quote & toast messages
     val dailyQuote = MutableStateFlow(NotificationHelper.quotes.first())
     val snackbarMessage = MutableStateFlow<String?>(null)
@@ -102,6 +110,17 @@ class TimeMasteryViewModel(application: Application) : AndroidViewModel(applicat
         userStats = repository.userStats
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+        leaderboardUsers = combine(
+            leaderboardPeriod,
+            userStats,
+            unitProgressList
+        ) { period, stats, progress ->
+            val xp = stats?.totalXp ?: 100
+            val streak = stats?.currentStreak ?: 3
+            val completedUnits = progress.count { it.isCompleted }
+            LeaderboardData.getLeaderboard(period, xp, streak, completedUnits)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
         viewModelScope.launch {
             repository.initDefaultDataIfNeeded()
             refreshQuote()
@@ -116,9 +135,41 @@ class TimeMasteryViewModel(application: Application) : AndroidViewModel(applicat
         dailyQuote.value = NotificationHelper.quotes.random()
     }
 
+    fun openNotificationCenter() {
+        isNotificationCenterOpen.value = true
+    }
+
+    fun closeNotificationCenter() {
+        isNotificationCenterOpen.value = false
+    }
+
+    fun updateNotificationSettings(settings: NotificationScheduleSettings) {
+        notificationSettings.value = settings
+        snackbarMessage.value = "تم حفظ تخصيص مواعيد وتكرار الإشعارات بنجاح! ⏰"
+    }
+
+    fun deleteNotification(id: String) {
+        inAppNotifications.value = inAppNotifications.value.filterNot { it.id == id }
+    }
+
+    fun setLeaderboardPeriod(period: LeaderboardPeriod) {
+        leaderboardPeriod.value = period
+    }
+
     fun triggerNotification() {
         val quote = dailyQuote.value
         NotificationHelper.sendMotivationalNotification(getApplication(), quote)
+        
+        // Also add to in-app notifications
+        val newNotif = InAppNotification(
+            id = "notif_${System.currentTimeMillis()}",
+            title = "حكمة برايان تريسي اللحظية 💡",
+            body = quote,
+            category = NotificationCategory.MOTIVATION,
+            timestamp = "الآن",
+            targetTab = AppTab.CURRICULUM
+        )
+        inAppNotifications.value = listOf(newNotif) + inAppNotifications.value
         snackbarMessage.value = "تم إرسال إشعار تحفيزي بنجاح!"
     }
 
