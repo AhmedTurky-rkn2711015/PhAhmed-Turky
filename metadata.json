@@ -1,0 +1,6 @@
+{
+  "name": "إتقان الوقت - برايان تريسي",
+  "description": "تطبيق تعليمي تفاعلي لإتقان إدارة الوقت والإنتاجية وفق فلسفة وأدوات برايان تريسي مع كويزات، وتلعيب، وأدوات عملية مثل TRIF وABCDE وكتل التركيز وتقطيع السلامي وتقارير الأداء.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
